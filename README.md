@@ -1,856 +1,560 @@
-\# Credit Card Anomaly Detection Using Apache Kafka
+# 💳 Credit Card Anomaly Detection Using Apache Kafka
+
+A real-time credit card transaction monitoring and anomaly detection system built using **Apache Kafka and Python**.
+
+The system continuously receives credit card transactions through Kafka, validates incoming data, detects multiple types of anomalies, calculates a risk score, classifies transactions, routes them to appropriate Kafka topics, stores processed data in SQLite, generates JSON reports, and creates alerts for high-risk transactions.
+
+---
+
+## 📌 Project Overview
+
+The **Credit Card Anomaly Detection System** demonstrates how Apache Kafka can be used to build a real-time transaction processing pipeline.
+
+Each incoming transaction goes through the following stages:
+
+**Transaction Generation → Kafka Producer → Validation → Anomaly Detection → Risk Scoring → Classification → Kafka Routing → Storage & Alerts**
+
+The project also implements a **Dead-Letter Queue (DLQ)** for invalid transactions and maintains processing statistics and application logs.
+
+---
+
+## 🎯 Objectives
+
+* Process credit card transactions in real time using Apache Kafka.
+* Validate incoming transaction data.
+* Detect different types of transaction anomalies.
+* Calculate a rule-based risk score.
+* Classify transactions as `NORMAL`, `SUSPICIOUS`, or `HIGH RISK`.
+* Route transactions to appropriate Kafka topics.
+* Generate alerts for high-risk transactions.
+* Store processed transactions and alerts in SQLite.
+* Generate JSON output and statistical reports.
+* Handle invalid transactions using a Dead-Letter Queue.
+* Maintain application logs for monitoring and debugging.
+
+---
+
+## 🛠️ Technologies Used
+
+| Technology              | Purpose                   |
+| ----------------------- | ------------------------- |
+| **Python**              | Application development   |
+| **Apache Kafka 4.3.1**  | Real-time event streaming |
+| **Kafka KRaft**         | Kafka cluster management  |
+| **kafka-python 3.0.11** | Python-Kafka integration  |
+| **SQLite**              | Persistent data storage   |
+| **JSON**                | Output and reporting      |
+| **Git**                 | Version control           |
+| **GitHub**              | Source code management    |
+| **Windows PowerShell**  | Development environment   |
+
+---
+
+## 🏗️ System Architecture
+
+```text
+                    ┌──────────────────────┐
+                    │ Transaction Generator│
+                    └──────────┬───────────┘
+                               │
+                               ▼
+                    ┌──────────────────────┐
+                    │    Kafka Producer    │
+                    └──────────┬───────────┘
+                               │
+                               ▼
+              ┌─────────────────────────────────┐
+              │   credit-card-transactions      │
+              └────────────────┬────────────────┘
+                               │
+                               ▼
+                    ┌──────────────────────┐
+                    │  Input Validation    │
+                    └──────────┬───────────┘
+                               │
+                 ┌─────────────┴─────────────┐
+                 │                           │
+             Invalid                       Valid
+                 │                           │
+                 ▼                           ▼
+      ┌────────────────────┐      ┌──────────────────────┐
+      │ invalid-transactions│      │ Anomaly Detection    │
+      │    (DLQ Topic)      │      └──────────┬───────────┘
+      └────────────────────┘                 │
+                                             ▼
+                                  ┌──────────────────────┐
+                                  │    Risk Scoring      │
+                                  └──────────┬───────────┘
+                                             │
+                                             ▼
+                                  ┌──────────────────────┐
+                                  │   Classification     │
+                                  └──────────┬───────────┘
+                                             │
+                       ┌─────────────────────┼─────────────────────┐
+                       │                     │                     │
+                       ▼                     ▼                     ▼
+                NORMAL                 SUSPICIOUS              HIGH RISK
+                       │                     │                     │
+                       ▼                     ▼                     ▼
+          normal-transactions     anomaly-transactions      high-risk-alerts
+                                                               │
+                                                               ▼
+                                                    ┌────────────────────┐
+                                                    │ SQLite + JSON +    │
+                                                    │ Alert Service +    │
+                                                    │ Logging            │
+                                                    └────────────────────┘
+```
 
+---
 
+## 📡 Kafka Topics
 
-\## 1. Project Overview
+The application uses the following Kafka topics:
 
+| Topic                      | Purpose                                        |
+| -------------------------- | ---------------------------------------------- |
+| `credit-card-transactions` | Receives incoming credit card transactions     |
+| `normal-transactions`      | Receives transactions classified as normal     |
+| `anomaly-transactions`     | Receives suspicious and high-risk transactions |
+| `high-risk-alerts`         | Receives high-risk transactions and alerts     |
+| `invalid-transactions`     | Dead-Letter Queue for invalid transactions     |
 
+---
 
-Credit Card Anomaly Detection Using Apache Kafka is a real-time transaction monitoring system developed using Apache Kafka and Python.
+# 🔍 Anomaly Detection
 
+The system uses rule-based anomaly detection techniques to analyze each valid transaction.
 
+## 1. 💰 Amount Anomaly
 
-The system continuously receives credit card transactions through Kafka, validates each transaction, analyzes it for different types of anomalies, calculates a risk score, classifies the transaction, and routes it to the appropriate Kafka topic.
+Detects unusually large transactions.
 
+```text
+Condition: Amount > ₹50,000
+Risk Score: +25
+```
 
+---
 
-The system also stores processed transactions and high-risk alerts in SQLite, generates JSON output files, maintains processing statistics, and records application logs.
+## 2. 📍 Location Anomaly
 
+Detects transactions from different locations for the same card within a short period.
 
+```text
+Location Window: 5 minutes
+Risk Score: +20
+```
 
-\---
+---
 
+## 3. ⚡ Velocity Anomaly
 
+Detects multiple transactions from the same card within a very short period.
 
-\## 2. Objectives
+```text
+Condition: 5 or more transactions within 60 seconds
+Risk Score: +20
+```
 
+---
 
+## 4. 🔄 Frequency Anomaly
 
-The main objectives of this project are:
+Detects unusually frequent transactions from the same card.
 
+```text
+Condition: 10 or more transactions within 1 hour
+Risk Score: +15
+```
 
+---
 
-\- To process credit card transactions in real time using Apache Kafka.
+## 5. 🌙 Time Anomaly
 
-\- To detect different types of transaction anomalies.
+Detects transactions occurring during the configured night-time period.
 
-\- To calculate a risk score for every transaction.
+```text
+Time Window: 00:00 – 05:00
+Risk Score: +10
+```
 
-\- To classify transactions as NORMAL, SUSPICIOUS, or HIGH RISK.
+---
 
-\- To route transactions to appropriate Kafka topics.
+## 6. 🔁 Duplicate Transaction
 
-\- To generate alerts for high-risk transactions.
+Detects repeated transactions having the same card, amount, merchant, and location within a short period.
 
-\- To validate incoming transaction data.
+```text
+Duplicate Window: 30 seconds
+Risk Score: +25
+```
 
-\- To handle invalid transactions using a dead-letter topic.
+---
 
-\- To store transaction and alert information using SQLite.
+# 📊 Risk Scoring
 
-\- To generate JSON outputs and processing statistics.
+The system calculates a risk score based on the anomalies detected.
 
-\- To maintain application logs for monitoring and debugging.
+| Anomaly               | Risk Score |
+| --------------------- | ---------: |
+| Amount Anomaly        |        +25 |
+| Location Anomaly      |        +20 |
+| Velocity Anomaly      |        +20 |
+| Frequency Anomaly     |        +15 |
+| Time Anomaly          |        +10 |
+| Duplicate Transaction |        +25 |
 
+The final risk score is **capped at 100**.
 
+> **Note:** The thresholds and scores are project-defined simulation rules intended for demonstration and learning purposes.
 
-\---
+---
 
+# 🚦 Transaction Classification
 
+After anomaly detection, each transaction is classified based on its detected anomalies and risk score.
 
-\## 3. Technologies Used
+| Classification | Condition                                         |
+| -------------- | ------------------------------------------------- |
+| **NORMAL**     | No anomaly detected and risk score = 0            |
+| **SUSPICIOUS** | At least one anomaly detected and risk score < 60 |
+| **HIGH RISK**  | Risk score ≥ 60                                   |
 
+### Classification Flow
 
+```text
+No Anomaly + Score = 0
+          ↓
+       NORMAL
 
-\- Python
+Anomaly + Score < 60
+          ↓
+     SUSPICIOUS
 
-\- Apache Kafka 4.3.1
+Score ≥ 60
+          ↓
+     HIGH RISK
+```
 
-\- Kafka KRaft
+---
 
-\- kafka-python 3.0.11
+# ✅ Input Validation
 
-\- SQLite
+Before anomaly detection, every incoming transaction passes through a validation layer.
 
-\- JSON
+The validation process checks:
 
-\- Git
+* Transaction ID
+* Card ID
+* Amount
+* Location
+* Merchant
+* Transaction type
+* Timestamp
+* Required fields
+* Data types
+* Positive transaction amount
+* Valid timestamp format
 
-\- GitHub
+Invalid transactions are **not passed to the anomaly detection engine**.
 
-\- Windows PowerShell
+Instead, they are routed to:
 
+```text
+invalid-transactions
+```
 
+This implements a **Dead-Letter Queue (DLQ)** pattern.
 
-\---
+---
 
+# 🚨 High-Risk Alert System
 
+When a transaction is classified as `HIGH RISK`, the system generates an alert.
 
-\## 4. System Architecture
+Each alert contains:
 
-
-
-The overall flow of the project is:
-
-
-
-Transaction Generator  
-
-↓  
-
-Kafka Producer  
-
-↓  
-
-`credit-card-transactions`  
-
-↓  
-
-Anomaly Detection Engine  
-
-↓  
-
-Validation and Anomaly Detection  
-
-↓  
-
-Risk Scoring and Classification  
-
-↓  
-
-Kafka Topic Routing  
-
-↓  
-
-SQLite + JSON Output + Logging + Alerts
-
-
-
-Invalid transactions are routed separately:
-
-
-
-Invalid Transaction  
-
-↓  
-
-Validation  
-
-↓  
-
-`invalid-transactions`  
-
-↓  
-
-Dead-Letter Queue
-
-
-
-\---
-
-
-
-\## 5. Kafka Topics
-
-
-
-The project uses the following Kafka topics:
-
-
-
-| Kafka Topic | Purpose |
-
-|---|---|
-
-| `credit-card-transactions` | Receives incoming credit card transactions |
-
-| `normal-transactions` | Stores/routs transactions classified as normal |
-
-| `anomaly-transactions` | Stores/routs suspicious transactions |
-
-| `high-risk-alerts` | Receives high-risk transactions and alerts |
-
-| `invalid-transactions` | Dead-letter topic for invalid transactions |
-
-
-
-\---
-
-
-
-\## 6. Anomaly Detection
-
-
-
-The anomaly detection engine checks every valid transaction using multiple rule-based detection techniques.
-
-
-
-\### 6.1 Amount Anomaly
-
-
-
-A transaction is considered an amount anomaly when:
-
-
-
-`Amount > ₹50,000`
-
-
-
-Risk score:
-
-
-
-`+25`
-
-
-
-\---
-
-
-
-\### 6.2 Location Anomaly
-
-
-
-A location anomaly is detected when the same card performs transactions from different locations within a short period.
-
-
-
-Current location window:
-
-
-
-`5 minutes`
-
-
-
-Risk score:
-
-
-
-`+20`
-
-
-
-\---
-
-
-
-\### 6.3 Velocity Anomaly
-
-
-
-Velocity anomaly detects multiple transactions from the same card within a short time.
-
-
-
-Current rule:
-
-
-
-`5 or more transactions within 60 seconds`
-
-
-
-Risk score:
-
-
-
-`+20`
-
-
-
-\---
-
-
-
-\### 6.4 Frequency Anomaly
-
-
-
-Frequency anomaly detects unusually frequent transactions from the same card.
-
-
-
-Current rule:
-
-
-
-`10 or more transactions within 1 hour`
-
-
-
-Risk score:
-
-
-
-`+15`
-
-
-
-\---
-
-
-
-\### 6.5 Time Anomaly
-
-
-
-Time anomaly detects transactions occurring during the defined night-time period.
-
-
-
-Current time window:
-
-
-
-`00:00 - 05:00`
-
-
-
-Risk score:
-
-
-
-`+10`
-
-
-
-\---
-
-
-
-\### 6.6 Duplicate Transaction
-
-
-
-Duplicate detection checks whether the same card performs a transaction with the same amount, merchant, and location within a short period.
-
-
-
-Current duplicate window:
-
-
-
-`30 seconds`
-
-
-
-Risk score:
-
-
-
-`+25`
-
-
-
-\---
-
-
-
-\## 7. Risk Scoring
-
-
-
-The project uses a rule-based risk scoring mechanism.
-
-
-
-| Anomaly Type | Risk Score |
-
-|---|---:|
-
-| Amount Anomaly | +25 |
-
-| Location Anomaly | +20 |
-
-| Velocity Anomaly | +20 |
-
-| Frequency Anomaly | +15 |
-
-| Time Anomaly | +10 |
-
-| Duplicate Anomaly | +25 |
-
-
-
-The final risk score is capped at 100.
-
-
-
-These thresholds and scores are project-defined simulation rules used for this demonstration project.
-
-
-
-\---
-
-
-
-\## 8. Transaction Classification
-
-
-
-Transactions are classified based on detected anomalies and the calculated risk score.
-
-
-
-\### NORMAL
-
-
-
-A transaction is classified as NORMAL when:
-
-
-
-\- No anomaly is detected.
-
-\- Risk score is 0.
-
-
-
-\### SUSPICIOUS
-
-
-
-A transaction is classified as SUSPICIOUS when:
-
-
-
-\- At least one anomaly is detected.
-
-\- Risk score is below 60.
-
-
-
-\### HIGH RISK
-
-
-
-A transaction is classified as HIGH RISK when:
-
-
-
-\- Risk score is 60 or above.
-
-
-
-The classification flow is:
-
-
-
-No Anomaly + Score 0  
-
-→ NORMAL
-
-
-
-Anomaly + Score < 60  
-
-→ SUSPICIOUS
-
-
-
-Score >= 60  
-
-→ HIGH RISK
-
-
-
-\---
-
-
-
-\## 9. Input Validation
-
-
-
-Before anomaly detection, incoming transactions are validated.
-
-
-
-The validation checks:
-
-
-
-\- Transaction ID
-
-\- Card ID
-
-\- Amount
-
-\- Location
-
-\- Merchant
-
-\- Transaction type
-
-\- Timestamp
-
-\- Required fields
-
-\- Valid data types
-
-\- Positive transaction amount
-
-\- Valid timestamp format
-
-
-
-If a transaction is invalid, it is not processed by the anomaly detection logic.
-
-
-
-Instead, it is routed to:
-
-
-
-`invalid-transactions`
-
-
-
-This implements a dead-letter queue pattern.
-
-
-
-\---
-
-
-
-\## 10. High-Risk Alert System
-
-
-
-When a transaction is classified as HIGH RISK, the system creates a high-risk alert.
-
-
-
-The alert contains:
-
-
-
-\- Alert ID
-
-\- Transaction ID
-
-\- Card ID
-
-\- Amount
-
-\- Risk score
-
-\- Risk level
-
-\- Alert type
-
-\- Detected anomalies
-
-\- Alert message
-
-\- Creation timestamp
-
-
+* Alert ID
+* Transaction ID
+* Card ID
+* Amount
+* Risk score
+* Risk level
+* Alert type
+* Detected anomalies
+* Alert message
+* Creation timestamp
 
 High-risk transactions are routed to:
 
+```text
+high-risk-alerts
+```
 
+Alerts are also:
 
-`high-risk-alerts`
+* Stored in SQLite
+* Written to `output/alerts.json`
+* Recorded in application logs
 
+---
 
+# 🗄️ SQLite Database
 
-Alerts are also stored in SQLite and written to:
+SQLite is used for persistent storage of processed transactions and generated alerts.
 
-
-
-`output/alerts.json`
-
-
-
-\---
-
-
-
-\## 11. SQLite Database
-
-
-
-SQLite is used for persistent storage.
-
-
-
-\### Transactions Table
-
-
+### Transactions Table
 
 The `transactions` table stores:
 
+* `transaction_id`
+* `card_id`
+* `amount`
+* `location`
+* `merchant`
+* `transaction_type`
+* `timestamp`
+* `risk_score`
+* `risk_level`
+* `anomalies`
 
-
-\- transaction\_id
-
-\- card\_id
-
-\- amount
-
-\- location
-
-\- merchant
-
-\- transaction\_type
-
-\- timestamp
-
-\- risk\_score
-
-\- risk\_level
-
-\- anomalies
-
-
-
-\### Alerts Table
-
-
+### Alerts Table
 
 The `alerts` table stores:
 
+* `alert_id`
+* `transaction_id`
+* `card_id`
+* `amount`
+* `risk_score`
+* `risk_level`
+* `alert_type`
+* `anomalies`
+* `message`
+* `created_at`
 
+Database file:
 
-\- alert\_id
+```text
+credit_card_anomaly.db
+```
 
-\- transaction\_id
+---
 
-\- card\_id
+# 📄 JSON Outputs
 
-\- amount
+The application generates JSON files inside the `output/` directory.
 
-\- risk\_score
+### `normal_transactions.json`
 
-\- risk\_level
+Contains transactions classified as `NORMAL`.
 
-\- alert\_type
+### `anomaly_transactions.json`
 
-\- anomalies
+Contains transactions classified as `SUSPICIOUS` or `HIGH RISK`.
 
-\- message
-
-\- created\_at
-
-
-
-The database file is:
-
-
-
-`credit\_card\_anomaly.db`
-
-
-
-\---
-
-
-
-\## 12. JSON Output
-
-
-
-The system generates JSON output files inside the `output` directory.
-
-
-
-\### normal\_transactions.json
-
-
-
-Contains transactions classified as NORMAL.
-
-
-
-\### anomaly\_transactions.json
-
-
-
-Contains transactions classified as SUSPICIOUS or HIGH RISK.
-
-
-
-\### alerts.json
-
-
+### `alerts.json`
 
 Contains generated high-risk alerts.
 
-
-
-\### statistics.json
-
-
+### `statistics.json`
 
 Contains processing statistics such as:
 
+* Total transactions
+* Normal transactions
+* Suspicious transactions
+* High-risk transactions
+* Invalid transactions
+* Amount anomalies
+* Location anomalies
+* Velocity anomalies
+* Frequency anomalies
+* Time anomalies
+* Duplicate anomalies
+* Alerts generated
+* Transactions saved
+* Processing errors
 
+---
 
-\- Total transactions
+# 📝 Logging
 
-\- Normal transactions
-
-\- Suspicious transactions
-
-\- High-risk transactions
-
-\- Invalid transactions
-
-\- Amount anomalies
-
-\- Location anomalies
-
-\- Velocity anomalies
-
-\- Frequency anomalies
-
-\- Time anomalies
-
-\- Duplicate anomalies
-
-\- Alerts generated
-
-\- Transactions saved
-
-\- Processing errors
-
-
-
-\---
-
-
-
-\## 13. Logging
-
-
-
-The project maintains application logs inside the `logs` directory.
-
-
+Application logs are maintained inside the `logs/` directory.
 
 Main log file:
 
-
-
-`logs/anomaly\_detector.log`
-
-
+```text
+logs/anomaly_detector.log
+```
 
 The logger records:
 
+* Application startup
+* Transaction processing
+* Transaction storage
+* Invalid transactions
+* High-risk alerts
+* Processing errors
+* Application shutdown
 
+---
 
-\- Application startup
-
-\- Transaction processing
-
-\- Transaction storage
-
-\- Invalid transactions
-
-\- High-risk alerts
-
-\- Processing errors
-
-\- Application shutdown
-
-
-
-\---
-
-
-
-\## 14. Project Structure
-
-
+# 📁 Project Structure
 
 ```text
-
 credit-card-anomaly-detection/
-
 │
-
 ├── producer/
-
-│   ├── transaction\_generator.py
-
-│   └── transaction\_producer.py
-
+│   ├── transaction_generator.py
+│   └── transaction_producer.py
 │
-
 ├── consumer/
-
-│   ├── transaction\_consumer.py
-
-│   └── anomaly\_detector.py
-
+│   ├── transaction_consumer.py
+│   └── anomaly_detector.py
 │
-
 ├── alerts/
-
-│   ├── \_\_init\_\_.py
-
-│   └── alert\_service.py
-
+│   ├── __init__.py
+│   └── alert_service.py
 │
-
 ├── storage/
-
 │   └── database.py
-
 │
-
 ├── config/
-
 │   └── config.py
-
 │
-
 ├── utils/
-
-│   ├── \_\_init\_\_.py
-
+│   ├── __init__.py
 │   ├── logger.py
-
 │   └── validators.py
-
 │
-
 ├── data/
-
 │
-
 ├── output/
-
-│   ├── normal\_transactions.json
-
-│   ├── anomaly\_transactions.json
-
+│   ├── normal_transactions.json
+│   ├── anomaly_transactions.json
 │   ├── alerts.json
-
 │   └── statistics.json
-
 │
-
 ├── logs/
-
-│   └── anomaly\_detector.log
-
+│   └── anomaly_detector.log
 │
-
 ├── tests/
-
 │
-
 ├── requirements.txt
-
 ├── README.md
-
 └── .gitignore
+```
 
+---
+
+# 🔄 End-to-End Processing Flow
+
+```text
+1. Generate Transaction
+          ↓
+2. Send Transaction to Kafka
+          ↓
+3. Consume Transaction
+          ↓
+4. Validate Transaction
+          ↓
+     ┌────┴────┐
+     │         │
+  Invalid    Valid
+     │         │
+     ▼         ▼
+   DLQ     Anomaly Detection
+             ↓
+        Risk Calculation
+             ↓
+        Classification
+             ↓
+     ┌───────┼────────┐
+     │       │        │
+  NORMAL  SUSPICIOUS HIGH RISK
+     │       │        │
+     └───────┼────────┘
+             ↓
+      SQLite Storage
+             +
+       JSON Outputs
+             +
+          Logging
+             +
+      High-Risk Alerts
+```
+
+---
+
+# 🧪 Testing
+
+The project includes a `tests/` directory for validating application functionality.
+
+Testing covers areas such as:
+
+* Transaction validation
+* Anomaly detection
+* Risk scoring
+* Transaction classification
+* Duplicate detection
+* Alert generation
+* Database operations
+* Invalid transaction handling
+
+---
+
+# 🚀 Key Features
+
+* ⚡ Real-time Kafka transaction processing
+* 🔍 Multiple anomaly detection rules
+* 📊 Rule-based risk scoring
+* 🚦 Transaction classification
+* 🚨 Automated high-risk alerts
+* ✅ Input validation
+* 💀 Dead-Letter Queue for invalid transactions
+* 🗄️ SQLite persistent storage
+* 📄 JSON reporting
+* 📈 Processing statistics
+* 📝 Application logging
+* 🧪 Unit testing support
+
+---
+
+# 🎓 Learning Outcomes
+
+Through this project, the following concepts were implemented and practiced:
+
+* Apache Kafka
+* Kafka Producers and Consumers
+* Kafka Topics
+* Kafka KRaft
+* Real-time event processing
+* Stream-based anomaly detection
+* Rule-based risk scoring
+* Dead-Letter Queue pattern
+* Data validation
+* SQLite database integration
+* JSON data processing
+* Logging
+* Error handling
+* Python project structure
+* Unit testing
+* Git and GitHub workflow
+
+---
+
+# ⚠️ Disclaimer
+
+This project is an **educational simulation** of a real-time credit card anomaly detection system.
+
+The anomaly thresholds, risk scores, and classification rules are project-defined demonstration rules and should not be considered production financial fraud-detection criteria.
+
+---
+
+
+## ⭐ Project Summary
+
+This project demonstrates a complete real-time event-processing pipeline using **Apache Kafka and Python**, combining streaming, validation, anomaly detection, risk scoring, alert generation, persistent storage, JSON reporting, logging, and Dead-Letter Queue processing into a single credit card monitoring application.
