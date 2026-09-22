@@ -53,58 +53,58 @@ The project also implements a **Dead-Letter Queue (DLQ)** for invalid transactio
 ## 🏗️ System Architecture
 
 ```text
-                    ┌──────────────────────┐
-                    │ Transaction Generator│
-                    └──────────┬───────────┘
-                               │
-                               ▼
-                    ┌──────────────────────┐
-                    │    Kafka Producer    │
-                    └──────────┬───────────┘
-                               │
-                               ▼
-              ┌─────────────────────────────────┐
-              │   credit-card-transactions      │
-              └────────────────┬────────────────┘
-                               │
-                               ▼
-                    ┌──────────────────────┐
-                    │  Input Validation    │
-                    └──────────┬───────────┘
-                               │
-                 ┌─────────────┴─────────────┐
-                 │                           │
-             Invalid                       Valid
-                 │                           │
-                 ▼                           ▼
-      ┌────────────────────┐      ┌──────────────────────┐
-      │ invalid-transactions│      │ Anomaly Detection    │
-      │    (DLQ Topic)      │      └──────────┬───────────┘
-      └────────────────────┘                 │
-                                             ▼
-                                  ┌──────────────────────┐
-                                  │    Risk Scoring      │
-                                  └──────────┬───────────┘
-                                             │
-                                             ▼
-                                  ┌──────────────────────┐
-                                  │   Classification     │
-                                  └──────────┬───────────┘
-                                             │
-                       ┌─────────────────────┼─────────────────────┐
-                       │                     │                     │
-                       ▼                     ▼                     ▼
-                NORMAL                 SUSPICIOUS              HIGH RISK
-                       │                     │                     │
-                       ▼                     ▼                     ▼
-          normal-transactions     anomaly-transactions      high-risk-alerts
+                     ┌──────────────────────┐
+                     │ Transaction Generator│
+                     └──────────┬───────────┘
+                                │
+                                ▼
+                     ┌──────────────────────┐
+                     │    Kafka Producer    │
+                     └──────────┬───────────┘
+                                │
+                                ▼
+               ┌─────────────────────────────────┐
+               │   credit-card-transactions      │
+               └────────────────┬────────────────┘
+                                │
+                                ▼
+                     ┌──────────────────────┐
+                     │  Input Validation    │
+                     └──────────┬───────────┘
+                                │
+                     ┌──────────┴──────────┐
+                     │                     │
+                  Invalid                Valid
+                     │                     │
+                     ▼                     ▼
+          ┌─────────────────────┐  ┌──────────────────────┐
+          │ invalid-transactions│  │ Anomaly Detection    │
+          │      (DLQ)          │  └──────────┬───────────┘
+          └─────────────────────┘             │
+                                              ▼
+                                    ┌──────────────────────┐
+                                    │    Risk Scoring      │
+                                    └──────────┬───────────┘
+                                               │
+                                               ▼
+                                    ┌──────────────────────┐
+                                    │   Classification     │
+                                    └──────────┬───────────┘
+                                               │
+                         ┌─────────────────────┼─────────────────────┐
+                         │                     │                     │
+                         ▼                     ▼                     ▼
+                      NORMAL               SUSPICIOUS            HIGH RISK
+                         │                     │                     │
+                         ▼                     ▼                     ▼
+               normal-transactions    anomaly-transactions     high-risk-alerts
                                                                │
                                                                ▼
-                                                    ┌────────────────────┐
-                                                    │ SQLite + JSON +    │
-                                                    │ Alert Service +    │
-                                                    │ Logging            │
-                                                    └────────────────────┘
+                                                     ┌────────────────────┐
+                                                     │ SQLite + JSON +    │
+                                                     │ Alert Service +    │
+                                                     │ Logging            │
+                                                     └────────────────────┘
 ```
 
 ---
@@ -117,7 +117,7 @@ The application uses the following Kafka topics:
 | -------------------------- | ---------------------------------------------- |
 | `credit-card-transactions` | Receives incoming credit card transactions     |
 | `normal-transactions`      | Receives transactions classified as normal     |
-| `anomaly-transactions`     | Receives suspicious and high-risk transactions |
+| `anomaly-transactions`     | Receives transactions classified as suspicious |
 | `high-risk-alerts`         | Receives high-risk transactions and alerts     |
 | `invalid-transactions`     | Dead-Letter Queue for invalid transactions     |
 
@@ -198,13 +198,13 @@ Risk Score: +25
 The system calculates a risk score based on the anomalies detected.
 
 | Anomaly               | Risk Score |
-| --------------------- | ---------: |
-| Amount Anomaly        |        +25 |
-| Location Anomaly      |        +20 |
-| Velocity Anomaly      |        +20 |
-| Frequency Anomaly     |        +15 |
-| Time Anomaly          |        +10 |
-| Duplicate Transaction |        +25 |
+| --------------------- | ---------- |
+| Amount Anomaly        | +25        |
+| Location Anomaly      | +20        |
+| Velocity Anomaly      | +20        |
+| Frequency Anomaly     | +15        |
+| Time Anomaly          | +10        |
+| Duplicate Transaction | +25        |
 
 The final risk score is **capped at 100**.
 
@@ -227,15 +227,15 @@ After anomaly detection, each transaction is classified based on its detected an
 ```text
 No Anomaly + Score = 0
           ↓
-       NORMAL
+        NORMAL
 
 Anomaly + Score < 60
           ↓
-     SUSPICIOUS
+      SUSPICIOUS
 
 Score ≥ 60
           ↓
-     HIGH RISK
+      HIGH RISK
 ```
 
 ---
@@ -441,8 +441,6 @@ credit-card-anomaly-detection/
 ├── logs/
 │   └── anomaly_detector.log
 │
-├── tests/
-│
 ├── requirements.txt
 ├── README.md
 └── .gitignore
@@ -467,42 +465,131 @@ credit-card-anomaly-detection/
      │         │
      ▼         ▼
    DLQ     Anomaly Detection
-             ↓
-        Risk Calculation
-             ↓
-        Classification
-             ↓
-     ┌───────┼────────┐
-     │       │        │
-  NORMAL  SUSPICIOUS HIGH RISK
-     │       │        │
-     └───────┼────────┘
-             ↓
-      SQLite Storage
-             +
-       JSON Outputs
-             +
-          Logging
-             +
-      High-Risk Alerts
+                ↓
+           Risk Calculation
+                ↓
+           Classification
+                ↓
+         ┌───────┼────────┐
+         │       │        │
+      NORMAL  SUSPICIOUS HIGH RISK
+         │       │        │
+         └───────┼────────┘
+                 ↓
+          SQLite Storage
+                 +
+          JSON Outputs
+                 +
+             Logging
+                 +
+          High-Risk Alerts
 ```
 
 ---
 
-# 🧪 Testing
+# 🧪 Testing and Verification
 
-The project includes a `tests/` directory for validating application functionality.
+The project was manually tested using the complete Kafka pipeline.
 
-Testing covers areas such as:
+### High-Risk Transaction Test
 
-* Transaction validation
-* Anomaly detection
-* Risk scoring
-* Transaction classification
-* Duplicate detection
-* Alert generation
-* Database operations
-* Invalid transaction handling
+A high-risk transaction was successfully detected with:
+
+```text
+Transaction ID : TXN00015
+Amount         : ₹88,998.91
+Risk Score     : 65
+Risk Level     : HIGH RISK
+```
+
+Detected anomalies:
+
+```text
+Amount Anomaly
+Location Anomaly
+Velocity Anomaly
+```
+
+The transaction was successfully:
+
+* Processed by the anomaly detector
+* Assigned a risk score of 65
+* Classified as HIGH RISK
+* Routed to `high-risk-alerts`
+* Stored in SQLite
+* Added to `alerts.json`
+* Recorded in application logs
+
+### Invalid Transaction Test
+
+An invalid transaction was also tested.
+
+```text
+Transaction ID : INVALID001
+Card ID        : CARD9999
+Amount         : -500
+```
+
+The transaction was missing the required `timestamp` field.
+
+The validation system correctly identified:
+
+```text
+Missing field: timestamp
+```
+
+The transaction was not processed by the anomaly detection rules.
+
+Instead, it was successfully routed to:
+
+```text
+invalid-transactions
+```
+
+The Kafka Dead-Letter Queue was also verified successfully.
+
+### SQLite Verification
+
+The generated high-risk alert was verified in the SQLite database.
+
+Example:
+
+```text
+Alert ID       : ALERT-TXN00015
+Transaction ID : TXN00015
+Risk Score     : 65
+Risk Level     : HIGH RISK
+```
+
+### JSON Verification
+
+The generated high-risk alert was also verified in:
+
+```text
+output/alerts.json
+```
+
+---
+
+# 📈 Verified Processing Statistics
+
+During testing, the system generated processing statistics including:
+
+```text
+Total Transactions      : 17
+Normal Transactions     : 6
+Suspicious Transactions : 10
+High-Risk Transactions  : 1
+Invalid Transactions    : 0
+Alerts Generated        : 1
+Processing Errors       : 0
+```
+
+The statistics are maintained in:
+
+```text
+output/statistics.json
+```
 
 ---
 
@@ -519,7 +606,8 @@ Testing covers areas such as:
 * 📄 JSON reporting
 * 📈 Processing statistics
 * 📝 Application logging
-* 🧪 Unit testing support
+* 🔄 Real-time Kafka topic routing
+* 🛑 Graceful application shutdown
 
 ---
 
@@ -541,8 +629,8 @@ Through this project, the following concepts were implemented and practiced:
 * Logging
 * Error handling
 * Python project structure
-* Unit testing
 * Git and GitHub workflow
+* Manual functional testing
 
 ---
 
@@ -553,7 +641,6 @@ This project is an **educational simulation** of a real-time credit card anomaly
 The anomaly thresholds, risk scores, and classification rules are project-defined demonstration rules and should not be considered production financial fraud-detection criteria.
 
 ---
-
 
 ## ⭐ Project Summary
 
